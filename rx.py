@@ -6,11 +6,10 @@ UNH Manchester
 """
 
 import lng_lib
-lng = lng_lib.Lightning(10,9,11,24,10000,25)
-
-#print(lng.get(0x00))
-lng.in_out(False)
-print(lng.get(0x00))
+lng = lng_lib.Lightning(10,9,11,26,10000,27)
 lng.in_out(True)
-print(lng.get(0x00))
-#lng.write_mask(0x01,0x45,0x22)
+lng.noise_floor(0)
+lng.watchdog_sensitivity(0)
+lng.min_strikes(0)
+lng.spike_rej(0)
+lng.disturbers(True)

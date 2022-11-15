@@ -155,7 +155,72 @@ class Lightning:
             byte = 0x20  # 00100000
         self.write_mask(0x03, mask, byte)
 
+    def cap_set(self, level):
+        if level <= 0:
+            level = 0
+        elif level >= 16:
+            level = 16
+        else:
+            level = int(level)
+        self.write_mask(0x08, 0xF0, level)
+
+    def ant_tune(self):
+        # Set the div factor based on the CPU speed
+        # This block mimics the actual calibration block, but changes nothing
+        # Goal is to set the lowest div factor possible
+        count = 0
+        test_var = True
+        start_time = time.time()
+        while count < 500000:
+            state = GPIO.input(self.int)
+            if test_var == True and test_var == True:
+                count += 1
+            last_state = state
+        end_time = time.time()
+        cpu_speed = 1 / (end_time - start_time)
+        # CPU speed must exceed (2 * 500 kHz)/(internal scaling factor)
+        div_bool = False
+        for scale in range(4):
+            if 5e5 * 2 / ((scale + 1) * 16) < cpu_speed:
+                div_factor = scale
+                div_bool = True
+                break
+        if div_bool:
+            print('div_factor is {}'.format(div_factor))
+        else:
+            return False
+
+        # Set the calculated div and run the tuning process
+        self.div_ratio(div_factor)
+        # Live measurement
+        best_frequency=0
+        best_cap=16
+        for cap in range(16):
+            count = 0
+            count_to = 500000 / div_factor
+            last_state = 0
+            start_time = time.time()
+            self.write_mask(0x08, 0x7F, 0x64)
+            while count <= count_to:
+                state = GPIO.input(self.int)
+                if last_state == 0 and state == 1:
+                    count += 1
+                last_state = state
+            end_time = time.time()
+            self.write_mask(0x08, 0x7F, 0x00)
+            frequency = count * div_factor / (end_time - start_time)
+            if abs(frequency-500000) < abs(best_frequency-500000):
+                best_frequency=frequency
+                best_cap=cap
+        self.cap_set(best_cap)
+        return True
+
     def calibrate(self):
+        # Tune the antenna
+        if self.ant_tune():
+            pass
+        else:
+            return False
         # Send Direct command CALIB_RCO
         # Modify REG0x08[6] = 1
         # Wait 2ms
@@ -171,8 +236,3 @@ class Lightning:
             return True
         else:
             return False
-
-    def ant_trim(self):
-        count = 0
-        state = False
-        self.write_mask(0x08, 0x7F, 0x64)
