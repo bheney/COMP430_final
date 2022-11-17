@@ -39,9 +39,9 @@ class Spi:
             bin_bits = bin_bits[2:]
             while len(bin_bits) < 8:
                 bin_bits = '0' + bin_bits
-            print('spi byte string{}={}'.format(count, bin_bits))
+            #print('spi byte string{}={}'.format(count, bin_bits))
             bits += bin_bits
-        print('spi string {}'.format(bits))
+        #print('spi string {}'.format(bits))
         low(self.cs)
         time.sleep(self.bitsec)
         for bit in bits:
@@ -56,7 +56,7 @@ class Spi:
             time.sleep(self.bitsec / 2)
 
     def write(self, write_bytes):
-        print('spi writing {}'.format(write_bytes))
+        #print('spi writing {}'.format(write_bytes))
         self.message(write_bytes)
         low(self.mosi)
         high(self.cs)
@@ -76,5 +76,5 @@ class Spi:
             time.sleep(self.bitsec / 4)
         low(self.mosi)
         high(self.cs)
-        print('spi received str {}, int {}'.format(read_val, int(read_val, 2)))
+        #print('spi received str {}, int {}'.format(read_val, int(read_val, 2)))
         return int(read_val, 2)
