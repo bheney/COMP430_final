@@ -359,3 +359,37 @@ calibrate()
   * Calibration was succesful
   * Retun True
   * Else, return False to indicate failure.
+## radio Library
+* Set the configuration bit PRIM_RX low.
+* When the application MCU has data to transmit, clock the address for the receiving node ( TX_ADDR ) and payload data ( TX_PLD ) into nRF24L01+ through the SPI.
+  * The width of TX-pay-load is counted from the number of bytes written into the TX FIFO from the MCU.
+  * TX_PLD must be written continuously while holding CSN low.
+  * TX_ADDR does not have to be rewritten if it is unchanged from last transmit.
+  * If the PTX device shall receive acknowledge, configure data pipe 0 to receive the ACK packet.
+  * The RX address for data pipe 0 ( RX_ADDR_P0 ) must be equal to the TX address ( TX_ADDR ) in the PTX device.
+  * For the example in Figure 14. on page 41 perform the following address settings for the TX5 device and the RX device:
+    * TX5 device: TX_ADDR = 0xB3B4B5B605
+    * TX5 device: RX_ADDR_P0 = 0xB3B4B5B605
+    * RX device: RX_ADDR_P5 = 0xB3B4B5B605
+* A high pulse on CE starts the transmission. The minimum pulse width on CE is 10μs.
+* nRF24L01+ ShockBurstTM:
+  * Radio is powered up.
+  * 16MHz internal clock is started.
+  * RF packet is completed (see the packet description).
+  * Data is transmitted at high speed (1Mbps or 2Mbps configured by MCU).
+* If auto acknowledgement is activated ( ENAA_P0 =1) the radio goes into RX mode immediately, unless the NO_ACK bit is set in the received packet.
+  * If a valid packet is received in the valid acknowledgement time window, the transmission is considered a success.
+  * The TX_DS bit in the STATUS register is set high and the payload is removed from TX FIFO.
+  * If a valid ACK packet is not received in the specified time window, the payload is retransmitted (if auto retransmit is enabled).
+  * If the auto retransmit counter ( ARC_CNT ) exceeds the programmed maximum limit (ARC), the MAX_RT bit in the STATUS register is set high.
+  * The payload in TX FIFO is NOT removed.
+  * The IRQ pin is active when MAX_RT or TX_DS is high.
+  * To turn off the IRQ pin, reset the interrupt source by writing to the STATUS register (see Interrupt chapter).
+  * If no ACK packet is received for a packet after the maximum number of retransmits, no further packets can be transmitted before the MAX_RT interrupt is cleared.
+  * The packet loss counter ( PLOS_CNT ) is incremented at each MAX_RT interrupt.
+  * That is, ARC_CNT counts the number of retransmits that were required to get a single packet through.
+  * PLOS_CNT counts the number of packets that did not get through after the maximum number of retransmits.
+* nRF24L01+ goes into standby-I mode if CE is low. 
+  * Otherwise, next payload in TX FIFO is transmitted.
+  * If TX FIFO is empty and CE is still high, nRF24L01+ enters standby-II mode.
+* If nRF24L01+ is in standby-II mode, it goes to standby-I mode immediately if CE is set low.
