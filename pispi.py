@@ -25,18 +25,20 @@ def low(pin):
 
 
 class Spi:
-    def __init__(self, initmosi, initmiso, initclk, initcs):
+    def __init__(self, initmosi, initmiso, initclk, initcs, clk_mode=True):
         """
         Creates an anstance of an SPI chip
         :param initmosi: int, MOSI pin
         :param initmiso: int, MISO pin
         :param initclk: int, CLK (clock) pin
         :param initcs: int, CS (chip select) pin
+        :param clk_mode: bool, clk falling True/clk rising False
         """
         self.mosi = initmosi
         self.miso = initmiso
         self.clk = initclk
         self.cs = initcs
+        self.mode = clk_mode
         GPIO.setmode(GPIO.BCM)
         GPIO.setup(self.miso, GPIO.IN, pull_up_down=GPIO.PUD_UP)
         GPIO.setup(self.mosi, GPIO.OUT)
@@ -66,15 +68,22 @@ class Spi:
         low(self.cs)
         time.sleep(self.bitsec)
         for bit in bits:
-            high(self.clk)
+            if self.mode:
+                high(self.clk)
+            else:
+                low(self.clk)
             time.sleep(self.bitsec / 4)
             if bit == '0':
                 low(self.mosi)
             elif bit == '1':
                 high(self.mosi)
             time.sleep(self.bitsec / 4)
-            low(self.clk)
+            if self.mode:
+                low(self.clk)
+            else:
+                high(self.clk)
             time.sleep(self.bitsec / 2)
+
 
     def write(self, write_bytes):
         """
