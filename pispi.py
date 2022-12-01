@@ -25,19 +25,19 @@ def low(pin):
 
 
 class Spi:
-    def __init__(self, initmosi, initmiso, initclk, initcs, clk_mode=True):
+    def __init__(self, mosi: int, miso: int, clk: int, cs: int, clk_mode=True):
         """
-        Creates an anstance of an SPI chip
-        :param initmosi: int, MOSI pin
-        :param initmiso: int, MISO pin
-        :param initclk: int, CLK (clock) pin
-        :param initcs: int, CS (chip select) pin
-        :param clk_mode: bool, clk falling True/clk rising False
+        Creates an instance of an SPI chip
+        :param mosi: int, MOSI pin
+        :param miso: int, MISO pin
+        :param clk: int, CLK (clock) pin
+        :param cs: int, CS (chip select) pin
+        :param clk_mode: bool, clk rising True/clk falling False
         """
-        self.mosi = initmosi
-        self.miso = initmiso
-        self.clk = initclk
-        self.cs = initcs
+        self.mosi = mosi
+        self.miso = miso
+        self.clk = clk
+        self.cs = cs
         self.mode = clk_mode
         GPIO.setmode(GPIO.BCM)
         GPIO.setup(self.miso, GPIO.IN, pull_up_down=GPIO.PUD_UP)
@@ -49,72 +49,54 @@ class Spi:
     bit_rate = 10000
     bitsec = 1 / bit_rate
 
-    def message(self, message_bytes):
+    def transaction(self, data, read_buffer=0):
         """
-        Intermediate method for sending a message. Not useful for top-level
-        communication
-        :param message_bytes: list of ints, the message to be sent
-        :return:
+        Conduct an SPI transaction over GPIO pins
+        :param data: lst, outgoing data as list of ints
+        :param read_buffer: int, number of bytes to continue clock operations
+            after last outgoing bit
+        :return: str, MISO status for EVERY clk pulse (includes a status
+        register)
         """
-        bits = ''
-        count = 0
-        for byte in message_bytes:
-            count += 1
-            bin_bits = bin(byte)
-            bin_bits = bin_bits[2:]
-            while len(bin_bits) < 8:
-                bin_bits = '0' + bin_bits
-            bits += bin_bits
+        # Convert data and read_buffer to a string
+        mosi = ''
+        for datum in data:
+            if datum > 255:
+                raise Exception("SPI data too large. Must be less than 255.")
+            byte = bin(datum)
+            byte = byte[2:]
+            while len(byte) < 8:
+                byte = '0' + byte
+            mosi += byte
+        mosi += read_buffer * 8 * '0'
+
+        # Start the SPI signal
         low(self.cs)
         time.sleep(self.bitsec)
-        for bit in bits:
+        miso_str: str = ''
+        for bit in mosi:
             if self.mode:
-                high(self.clk)
-            else:
                 low(self.clk)
+            else:
+                high(self.clk)
             time.sleep(self.bitsec / 4)
+
             if bit == '0':
                 low(self.mosi)
             elif bit == '1':
                 high(self.mosi)
             time.sleep(self.bitsec / 4)
+
             if self.mode:
-                low(self.clk)
-            else:
                 high(self.clk)
-            time.sleep(self.bitsec / 2)
-
-
-    def write(self, write_bytes):
-        """
-        One-way communication via SPI
-        :param write_bytes: list of ints
-        :return:
-        """
-        self.message(write_bytes)
-        low(self.mosi)
-        high(self.cs)
-
-    def read(self, address, length):
-        """
-        Two-way communication via SPI
-        :param address: int, Register address or read protocol for
-        chip
-        :param length: int, length of expected response
-        :return:
-        """
-        self.message(address)
-        read_val = ''
-        for _ in range(length):
-            high(self.clk)
-            time.sleep(self.bitsec / 2)
-            low(self.clk)
-            time.sleep(self.bitsec / 4)
-            if 0 == GPIO.input(self.miso):
-                read_val += '0'
             else:
-                read_val += '1'
-            time.sleep(self.bitsec / 4)
-        low(self.mosi)
+                low(self.clk)
+            time.sleep(self.bitsec / 2)
+
+            # Read the MISO pin
+            if 0 == GPIO.input(self.miso):
+                miso_str += '0'
+            else:
+                miso_str += '1'
         high(self.cs)
-        return int(read_val, 2)
+        return miso_str

@@ -12,7 +12,7 @@ GPIO.setwarnings(False)
 
 
 class Lightning:
-    def __init__(self, mosi, miso, clk, cs, rate, interrupt):
+    def __init__(self, mosi, miso, clk, cs, interrupt):
         """
         Initialize an instance of an AS3935 lightning detector
         :param mosi: int, MOSI pin
@@ -22,8 +22,8 @@ class Lightning:
         :param rate: int, Bit rate (Hz). Cannot be 500kHz
         :param interrupt: int IRQ (interrupt) pin
         """
-        self.spi = pispi.Spi(mosi, miso, clk, cs)
-        self.spi.bit_rate = rate
+        self.spi = pispi.Spi(mosi, miso, clk, cs, False)
+        self.spi.bit_rate = 10000
         self.int = interrupt
         GPIO.setup(self.int, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
@@ -37,10 +37,12 @@ class Lightning:
         # First two bits of read signal are always "01"
         # Next six bits are the address
         # print('lng getting address {}'.format(address))
-        byte = 0x40  # 0b01000000
-        byte = byte | address  # Combines the read signal & address
+        address = address & 0b00111111
+        outgoing = 0b01000000 | address
         # print('lng requesting address from {}'.format(byte))
-        return self.spi.read([byte], 8)
+        incoming = self.spi.transaction([outgoing], 1)
+        incoming = incoming[8:]
+        return int(incoming, 2)
 
     def send(self, address, data):
         """
@@ -53,10 +55,9 @@ class Lightning:
         # First two bits are always "00"
         # Next six bits are the address
         # Next eight bits are the data
-        mask = 0X00  # 0b11000000
-        address = mask ^ address
+        address = 0b11000000 | address
         # print('lng writing to {}, sending {}'.format(address, data))
-        self.spi.write([address, data])
+        return self.spi.transaction([address, data])
 
     def write_mask(self, address, mask, data):
         """
@@ -84,11 +85,11 @@ class Lightning:
         :param indoor: bool, True for indoor use, False for outdoor
         :return:
         """
-        mask = 0xC1  # 11000001
+        mask = 0b11000001
         if indoor:
-            mode = 0x24  # 00100100
+            mode = 0b00100100
         else:
-            mode = 0x1C  # 00011100
+            mode = 0b00011100
         self.write_mask(0x00, mask, mode)
         print('Indoor/Outdoor set')
 
@@ -117,7 +118,7 @@ class Lightning:
             level = 0
         if level > 7:
             level = 7
-        mask = 0x8F  # 10001111
+        mask = 0b10001111
         level = level << 4
         self.write_mask(0x01, mask, level)
         print('Noise Floor set')
@@ -134,7 +135,7 @@ class Lightning:
             level = 0
         if level > 15:
             level = 15
-        mask = 0xF0  # 11110000
+        mask = 0b11110000
         self.write_mask(0x01, mask, level)
         print('Watchdog Sensitivity set')
 
@@ -145,7 +146,7 @@ class Lightning:
         :return:
         """
         adr = 0x02
-        mask = 0xBF  # 10111111
+        mask = 0b10111111
         self.write_mask(adr, mask, 0x40)
         time.sleep(.002)
         self.write_mask(adr, mask, 0x00)
@@ -169,7 +170,7 @@ class Lightning:
         if level > 3:
             level = 3
         level = level << 4
-        mask = 0xCF  # 11001111
+        mask = 0b11001111
         self.write_mask(0x02, mask, level)
 
     def spike_rej(self, level: int):
@@ -184,7 +185,7 @@ class Lightning:
             level = 0
         if level > 15:
             level = 15
-        mask = 0xF0  # 11110000
+        mask = 0b11110000
         self.write_mask(0x02, mask, level)
 
     def div_ratio(self, level: int):
@@ -199,7 +200,7 @@ class Lightning:
         if level > 3:
             level = 3
         level = level << 6
-        mask = 0x3F  # 00111111
+        mask = 0b00111111
         self.write_mask(0x03, mask, level)
         print('Div Ratio set to {}'.format(level))
 
@@ -211,11 +212,11 @@ class Lightning:
         :param report: bool
         :return:
         """
-        mask = 0xDF  # 11011111
+        mask = 0b11011111
         if report:
             byte = 0x00
         else:
-            byte = 0x20  # 00100000
+            byte = 0b00100000
         self.write_mask(0x03, mask, byte)
 
     def cap_set(self, level):
