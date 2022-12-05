@@ -1,5 +1,6 @@
 class Radio:
-    def __init__(self, mosi, miso, clk, cs, ce, address_width=5, frequency=2,
+    def __init__(self, mosi, miso, clk, cs, ce, irq, address_width=5, \
+                                                                  frequency=2,
                  air_data_rate=1, lna_gain=):
         """
         Initialize an instance of an nRF24l01 transceiver
@@ -8,12 +9,16 @@ class Radio:
         :param clk: int, CLK (clock) pin
         :param cs: int, CS (chip select) pin
         :param ce: int ce pin
+        :param irq: int, interrupt pin
         """
         self.spi = pispi.Spi(mosi, miso, clk, cs, True)
         self.spi.bit_rate = 10000
         self.ce = ce
-        self.pipe={'0':0xE7E7E7E7E7, '1':0xC2C2C2C2C2}
+        self.pipe_address={'0':0xE7E7E7E7E7, '1':0xC2C2C2C2C2}
+        self.pipe_dynamic={'0':False,'1':False}
+        self.irq=irq
         GPIO.setup(self.ce, GPIO.OUT)
+        GPIO.setup(self.irq,GPIO.IN)
     def write(self, register,*data):
         """
         Write data to a register
@@ -48,6 +53,7 @@ class Radio:
         """
         address = address & 0b00011111
         return self.spi.transaction(address,1)
+
     def enable_pipe(self, pipe_id, pipe_address, auto_ack=True, dynamic=True,
                     payload_len=32):
         # Enable Pipe
@@ -63,11 +69,13 @@ class Radio:
 
         # Set payload width
         if dynamic:
+            self.pipe_dynamic[pipe_id]=True
             self.write_mask(0x1D,0b11111011,0b100)
             self.write_mask(0x1C,mask,bit)
             if not auto_ack:
                 raise Exception
         else:
+            self.pipe_dynamic[pipe_id]=False
             register=0x11+pipe_id
             self.write(register,payload_len)
 
@@ -75,7 +83,7 @@ class Radio:
         address_width = self.get(0x03) + 2
         msb = pipe_address.to_bytes(address_width, 'big')
         lsb = pipe_address.to_bytes(address_width, 'little')
-        if pipe_id !=0 and pipe_address==self.pipe['0']:
+        if pipe_id !=0 and pipe_address==self.pipe_address['0']:
             raise Exception('Address cannot be the same as Pipe 0')
 
         if pipe_id=1:
@@ -95,29 +103,30 @@ class Radio:
                 raise Exception(
                     'address must contain more than one level shift')
 
-        for check_pipe in self.pipe:
-            address=self.pipe[check_pipe]
+        for check_pipe in self.pipe_address:
+            address=self.pipe_address[check_pipe]
             check_address_bytes=address.to_bytes(address_width,'big')
             if check_pipe != pipe_id:
                 if check_address_bytes[-1] == msb[-1]:
                     raise Exception("LSB of pipe address must be unique")
 
-        self.write(0x0A+pipe_id,)
-
-
-
+        if not (pipe_id==0 or pipe_id==1):
+            lsb=lsb[0]
+        self.write(0x0A+pipe_id,lsb)
 
     def listen(self):
         self.write_mask(0x00,0b11111110,0b1)
+        GPIO.OUT(self.ce,HIGH)
+        while self.irq==0:
+            pass
+        status=self.read(0b11111111)
+        pipe=status&0b00001110
+        pipe=pipe>>1
+        if self.pipe_dynamic[pipe]:
+            self.spi.transaction(0b01100000,1)
 
-All data pipes that receive data must be enabled ( EN_RXADDR register),
-enable auto acknowledgement for all pipes running
-Enhanced ShockBurstTM ( EN_AA register), and set the correct payload widths ( RX_PW_Px regis-
-ters).
-Set up addresses as described in item 2 in the Enhanced ShockBurstTM transmitting pay-
-load example above.
-Start Active RX mode by setting CE high.
-After 130μs nRF24L01+ monitors the air for incoming communication.
+
+
 When a valid packet is received (matching address and correct CRC), the payload is stored in the
 RX-FIFO, and the RX_DR bit in STATUS register is set high. The IRQ pin is active when RX_DR is
 high. RX_P_NO in STATUS register indicates what data pipe the payload has been received in.
