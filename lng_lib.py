@@ -19,7 +19,6 @@ class Lightning:
         :param miso: int, MISO pin
         :param clk: int, CLK (clock) pin
         :param cs: int, CS (chip select) pin
-        :param rate: int, Bit rate (Hz). Cannot be 500kHz
         :param interrupt: int IRQ (interrupt) pin
         """
         self.spi = pispi.Spi(mosi, miso, clk, cs, False)
@@ -55,9 +54,9 @@ class Lightning:
         # First two bits are always "00"
         # Next six bits are the address
         # Next eight bits are the data
-        address = 0b11000000 | address
+        address = 0b00111111 & address
         # print('lng writing to {}, sending {}'.format(address, data))
-        return self.spi.transaction([address, data])
+        self.spi.transaction([address, data])
 
     def write_mask(self, address, mask, data):
         """
@@ -74,8 +73,8 @@ class Lightning:
         # Write to those bits
         byte = self.get(address)  # Get what's there
         byte = byte & mask  # Write 0s to write bits. Keep others the same
-        data = data & ~mask
-        byte = byte | data  # Write the new data to the writeable bits
+        data = data & ~mask # Write 0s to the persistent bits of `data`
+        byte = byte | data  # Combine the packets
         self.send(address, byte)
 
     def in_out(self, indoor: bool):
