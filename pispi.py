@@ -61,7 +61,7 @@ class Spi:
         # Convert data and read_buffer to a string
         mosi = ''
         for datum in data:
-            if datum > 255:
+            if int(datum) > 255:
                 raise Exception("SPI data too large. Must be less than 255.")
             byte = bin(datum)
             byte = byte[2:]
@@ -71,6 +71,7 @@ class Spi:
         mosi += read_buffer * 8 * '0'
 
         # Start the SPI signal
+        low(self.clk)
         low(self.cs)
         time.sleep(self.bitsec)
         miso_str: str = ''
@@ -79,6 +80,7 @@ class Spi:
                 low(self.clk)
             else:
                 high(self.clk)
+
             time.sleep(self.bitsec / 4)
 
             if bit == '0':

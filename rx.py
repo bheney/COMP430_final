@@ -4,48 +4,26 @@ Ben Heney
 COMP 430 Final Project, Fall 2022
 UNH Manchester
 """
+import radio
+mosi=13
+miso=16
+clk=17
+cs=4
+ce=12
+irq=5
 
-import lng_lib
-import RPi.GPIO as GPIO
-import time
-
-lng = lng_lib.Lightning(10,9,11,26,10000,27)
-lng.in_out(True)
-#Getting noise faults on indoor mode @ highest floor 16:18 11/15
-#11-16 Ran all day at 1,7,7 with no faults
-#11-17 Ran all last night 0,6,6 with no faults
-#11-17 Not getting any faults at lowest level. No obvious hardware issues. I will run all day today.
-#11-17 07:51 Set changes to run
-lng.noise_floor(0)
-lng.watchdog_sensitivity(0)
-lng.min_strikes(0)
-lng.spike_rej(0)
-lng.disturbers(True)
-if lng.calibrate():
-    pass
-else:
-    raise Exception('Calibration Failed')
+rx=radio.Radio(mosi, miso, clk, cs, ce, irq, address_width=5,frequency=76,air_data_rate=0,crc=1)
+rx.enable_pipe(0, 'AAAAA', auto_ack=True, dynamic=False,
+                    payload_len=4)
+rx.enable_pipe(1, '1Node', auto_ack=True, dynamic=False,
+                   payload_len=4)
+# registers=[]
+# for register in range (0x18):
+#     registers.append(register)
+# print('Final state')
+# for register in registers:
+#     print(f'Register {register} reads {bin(rx.get(register))}')
+# print (f'Register 0x0A: {hex(rx.get(0x0A,5))}')
+# print (f'Register 0x0B: {hex(rx.get(0x0B,5))}')
 while True:
-    if GPIO.input(lng.int)==1:
-        int_type=lng.get(0x03)
-        int_type=int_type & 0x0F
-        if int_type==0x01:
-            event='noise'
-        elif int_type==0x04:
-            event='disturber'
-        elif int_type==0x08:
-            event='lightning'
-        else:
-            event='undefined'
-        print('{} detected'.format(event))
-        now=time.gmtime()
-        time_write='{}-{}-{} {}:{}:{}'.format(now[2],now[1],now[0],now[3],now[4],now[5])
-        distance=lng.get(0x07)
-        distance=distance&0x3F
-        lng_log=open('lng_log.csv','r')
-        log_mem=lng_log.read()
-        lng_log.close()
-        lng_log=open('lng_log.csv','w')
-        lng_log.write('{}\n{},{},{}'.format(log_mem,time_write,event,distance))
-        lng_log.close()
-    
+    print(message=rx.listen())
