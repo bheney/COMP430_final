@@ -1,5 +1,6 @@
 import pispi
 import RPi.GPIO as GPIO
+import time
 GPIO.setwarnings(False)
 
 class Radio:
@@ -31,12 +32,14 @@ class Radio:
         self.write_mask(0x00, 0b11111101,0b10)
         self.write_mask(0x03,0b11111100,address_width-2)
         self.write_mask(0x05,0b10000000,frequency)
-        if air_data_rate==2:
-            self.write_mask(0x06, 0b11011111, 0xFF)
-        elif air_data_rate==1:
+        
+        if air_data_rate==0:
+            self.write_mask(0x06, 0b11010111, 0xF0)
+        elif air_data_rate==2:
             self.write_mask(0x06,0b11010111,0xF)
-        elif air_data_rate==0:
+        elif air_data_rate==1:
               self.write_mask(0x06,0b11010111,0)
+        
         if crc==0:
             self.write_mask(0x00,0b11110111,0)
         elif crc==1:
@@ -48,7 +51,7 @@ class Radio:
         """
         Write data to a register
         :param register: int, register address
-        :param data: int, data to send
+        :param data: list, int data to send
         :return: int, status register
         """
         w_register = 0b00011111 & register
@@ -87,7 +90,11 @@ class Radio:
         address = address & 0b00011111
         data = self.spi.transaction([address], buffer)
         return int(data[8:],2)
-
+    
+    def disable_pipe(self, pipe_id):
+        mask=(255)-(2**pipe_id)
+        self.write_mask(0x02,mask,0)
+        
     def enable_pipe(self, pipe_id, pipe_address, auto_ack=True, dynamic=True,
                     payload_len=32):
         # Enable Pipe
@@ -120,7 +127,10 @@ class Radio:
         lsb=[]
         while len(pipe_address) > 0:
             least_byte=pipe_address[-1]
-            lsb.append(ord(least_byte))
+            if type(least_byte)==str:
+                lsb.append(ord(least_byte))
+            else:
+                lsb.append(least_byte)
             pipe_address=pipe_address[:-1]
         msb=lsb.copy()
         msb.reverse()
@@ -158,7 +168,8 @@ class Radio:
         self.write_mask(0x00, 0b11111110, 0b1)
         GPIO.output(self.ce, GPIO.HIGH)
         while GPIO.input(self.irq)==1:
-            pass
+            print(self.spi.transaction([0xFF],0))
+            time.sleep(5)
         status = int(self.spi.transaction([0b11111111]),2)
         pipe = status & 0b00001110
         pipe = pipe >> 1
@@ -172,3 +183,9 @@ class Radio:
         message = self.spi.transaction(0b01100001, message_len)
         GPIO.OUT(self.ce, LOW)
         return message
+    
+    def setup_hack(self):
+        image={0:[0xF],0x1:[0x3f],0x2:[0x2],0x3:[0x3],0x4:[0x5f],0x5:[0x4c],0x6:[0x3],0x7:[0xe],0x8:[0],0x9:[0],0x0A:[49,78,111,100,101],0x0b:[50,78,111,100,101],28:[0],29:[0]}
+        for register in image:
+            self.write(register,image[register])
+        

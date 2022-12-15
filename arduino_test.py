@@ -10,7 +10,7 @@ def parse_str(string, delim):
         
     
 if __name__=='__main__':
-    ser=serial.Serial('/dev/ttyACM0',115200,timeout=1)
+    ser=serial.Serial('/dev/ttyACM1',115200,timeout=1)
     ser.reset_input_buffer()
     
     while True:
