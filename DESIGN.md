@@ -1,4 +1,4 @@
-# Receiving Station
+# RX Station
 ## pispi SPI Library
 The pispi Python module facilitates SPI communication by directly manipulating GPIO pins on a Raspberry Pi.
 ### End-use functions and methods
@@ -70,7 +70,6 @@ low(pin)
     """
 ```
 * Rename `GPIO.output(pin, GPIO.LOW)` to improve semantics
-
 ## lng_lib Library
 ### class Lightning
 #### Instance Methods
@@ -325,14 +324,14 @@ calibrate()
 * Read `srco` from 0x3B
 * Mask over `trco` and `srco` to get bits [7:6]
 * If `trco == 0x80` and `srco == 0x80`
-  * Calibration was succesful
-  * Retun True
+  * Calibration was successful
+  * Return True
   * Else, return False to indicate failure.
 ## radio Library
 ### Class Radio
 ```
 def __init__(self, mosi, miso, clk, cs, ce, irq, address_width=5,
-         frequency=2, air_data_rate=1, lna_gain=0):
+         frequency=76, air_data_rate=1, crc=0):
   """
   Initialize an instance of an nRF24l01 transceiver
   :param mosi: int, MOSI pin
@@ -341,6 +340,10 @@ def __init__(self, mosi, miso, clk, cs, ce, irq, address_width=5,
   :param cs: int, CS (chip select) pin
   :param ce: int ce pin
   :param irq: int, interrupt pin
+  :param address_width: int, length of pipe addresses
+  :param frequency: int, operating frequency
+  :param air_data_rate: int, over-the-air data rate
+  :param irq: crc, acknowledgement encoding variable
   """
 ```
 * Nest `pispi.Spi` into `self.spi`
@@ -377,125 +380,106 @@ def write_mask(self, register, mask, data):
 * Combine `state` and `data`
 * Use `write` to write the modified data and return the status register
 
-* ---CONTINUE DOCUMENTATION HERE---    
-* def get(self, address):
-        """
-        Read a register
-        :param address: int, Register address
-        :return: int, the byte stored in the `address` register
-        """
-        address = address & 0b00011111
-        return self.spi.transaction(address, 1)
+```
+def get(self, address, buffer=1):
+  """
+  Read a register
+  :param buffer: int, size of response (in bytes)
+      does not include a status byte
+  :param address: int, Register address
+  :return: int, the byte stored in the `address` register
+  """
+ ```
+* Send the read command to `address` register
+* Return `buffer` number of bytes as an integer
+  * Trim off the status register
+```
+  def disable_pipe(self, pipe_id):
+  Disable a communicaiton pipe
+  :param pipe_id: int, the pipe to be disables
+  :return: 
+ ```
+* Disable `pipe_id` in register 0x02
+```
+def enable_pipe(self, pipe_id, pipe_address, auto_ack=True, dynamic=True,
+                      payload_len=32):
+  """
+  Initialize a communicaiton pipe
+  :param pipe_id: int, the pipe to be initialized
+  :param pipe_address: int, the address of the pipe
+  :param auto_ack: bool, True: enable auto-acknowledgements, False: 
+    disable auto-acknowledgements
+  :param dynamic: bool, True: enable dynamic payloads, False: disable 
+    dynamic payloads
+  :param payload_len: int, the length of static payloads
+  :return:
+  """
+```
+* Enable pipe in register 0x02
+* Enable/Disable AutoAck in register 0x01
+* Set payload width:
+  * if dynamic: Enable dynamic payloads in 0x1C adn 0x1D
+  * if static: Write payload length in 0x11-0x16
+* Set address:
+  * Written LSByte first
+  * Addresses 1-5 cannot be the same as 0
+  * Address cannot start with 0b10
+  * Address must contain more than one level shift
+  * LSB of pipe address must be unique
+```
+def listen(self):
+  """
+  Wait for incomming data and report it
+  :return: str, incomming data
+  """
+```
+* Set radio in RX mode
+* Set CE high
+* Wait for interrupt to go high                  print(self.spi.transaction([0xFF], 0))
+* Get pipe address for incoming data
+* Get the data length if dynamic
+* Stop listening with CE low
+* return message
+```
+def setup_hack(self):
+  """
+  Copying the register data from RF24 library on Arduino
+  :return: 
+  """
+```
+* Create dictionary `image`
+  * Keys: register addresses
+  * Values register values from arduino setup
+  * Write all values to all keys
+## lng_monitor.py
+* Initialize an instance of `Lightning` class from `lng_lib`
+* Set to indoor mode
+* Set operating parameters
+  * These will require tuning based on the environment
+* Calibration feature is still not fully functional
+* When an interrupt is detected:
+  * Get the type and distance
+  * Write that info, along with the time, into CSV `lng_log.csv`
 
-    def enable_pipe(self, pipe_id, pipe_address, auto_ack=True, dynamic=True,
-                    payload_len=32):
-        # Enable Pipe
-        mask = (254 + 1) - (2 ^ pipe_id)
-        bit = 1 << pipe_id
-        self.write_mask(0x02, mask, bit)
-
-        # Enable/Disable AutoAck
-        if auto_ack:
-            self.write_mask(0x01, mask, bit)
-        else:
-            self.write_mask(0x01, mask, ~bit)
-
-        # Set payload width
-        if dynamic:
-            self.pipe_dynamic[pipe_id] = True
-            self.write_mask(0x1D, 0b11111011, 0b100)
-            self.write_mask(0x1C, mask, bit)
-            if not auto_ack:
-                raise Exception
-        else:
-            self.pipe_dynamic[pipe_id] = False
-            register = 0x11 + pipe_id
-            self.write(register, payload_len)
-
-        # Set address
-        address_width = self.get(0x03) + 2
-        msb = pipe_address.to_bytes(address_width, 'big')
-        lsb = pipe_address.to_bytes(address_width, 'little')
-        if pipe_id != 0 and pipe_address == self.pipe_address['0']:
-            raise Exception('Address cannot be the same as Pipe 0')
-
-        if pipe_id == 1:
-            bit_address = ''
-            for byte in msb:
-                bit_address += bin(int(byte))[2:]
-            if bit_address[0:1] == '10':
-                raise Exception('Address cannot start with 0b10')
-
-            state = bit_address[0]
-            shift = 0
-            for bit in bit_address:
-                if bit != state:
-                    shift += 1
-                state = bit
-            if shift <= 1:
-                raise Exception(
-                    'address must contain more than one level shift')
-
-        for check_pipe in self.pipe_address:
-            address = self.pipe_address[check_pipe]
-            check_address_bytes = address.to_bytes(address_width, 'big')
-            if check_pipe != pipe_id:
-                if check_address_bytes[-1] == msb[-1]:
-                    raise Exception("LSB of pipe address must be unique")
-
-        if not (pipe_id == 0 or pipe_id == 1):
-            lsb = lsb[0]
-        self.write(0x0A + pipe_id, lsb)
-
-    def listen(self):
-        self.write_mask(0x00, 0b11111110, 0b1)
-        GPIO.OUT(self.ce, HIGH)
-        while self.irq == 0:
-            pass
-        status = self.spi.transaction(0b11111111)
-        pipe = status & 0b00001110
-        pipe = pipe >> 1
-        if self.pipe_dynamic[pipe]:
-            message_len = self.spi.transaction(0b01100000, 1)
-            message_len = message_len[8:]
-            if message_len > 32:
-                self.spi.transaction(0b11100010, 0)
-        else:
-            message_len = self.get(0x11 + pipe)
-        message = self.spi.transaction(0b01100001, message_len)
-        GPIO.OUT(self.ce, LOW)
-        return message
-
-* Set the configuration bit PRIM_RX low.
-* When the application MCU has data to transmit, clock the address for the receiving node ( TX_ADDR ) and payload data ( TX_PLD ) into nRF24L01+ through the SPI.
-  * The width of TX-pay-load is counted from the number of bytes written into the TX FIFO from the MCU.
-  * TX_PLD must be written continuously while holding CSN low.
-  * TX_ADDR does not have to be rewritten if it is unchanged from last transmit.
-  * If the PTX device shall receive acknowledge, configure data pipe 0 to receive the ACK packet.
-  * The RX address for data pipe 0 ( RX_ADDR_P0 ) must be equal to the TX address ( TX_ADDR ) in the PTX device.
-  * For the example in Figure 14. on page 41 perform the following address settings for the TX5 device and the RX device:
-    * TX5 device: TX_ADDR = 0xB3B4B5B605
-    * TX5 device: RX_ADDR_P0 = 0xB3B4B5B605
-    * RX device: RX_ADDR_P5 = 0xB3B4B5B605
-* A high pulse on CE starts the transmission. The minimum pulse width on CE is 10μs.
-* nRF24L01+ ShockBurstTM:
-  * Radio is powered up.
-  * 16MHz internal clock is started.
-  * RF packet is completed (see the packet description).
-  * Data is transmitted at high speed (1Mbps or 2Mbps configured by MCU).
-* If auto acknowledgement is activated ( ENAA_P0 =1) the radio goes into RX mode immediately, unless the NO_ACK bit is set in the received packet.
-  * If a valid packet is received in the valid acknowledgement time window, the transmission is considered a success.
-  * The TX_DS bit in the STATUS register is set high and the payload is removed from TX FIFO.
-  * If a valid ACK packet is not received in the specified time window, the payload is retransmitted (if auto retransmit is enabled).
-  * If the auto retransmit counter ( ARC_CNT ) exceeds the programmed maximum limit (ARC), the MAX_RT bit in the STATUS register is set high.
-  * The payload in TX FIFO is NOT removed.
-  * The IRQ pin is active when MAX_RT or TX_DS is high.
-  * To turn off the IRQ pin, reset the interrupt source by writing to the STATUS register (see Interrupt chapter).
-  * If no ACK packet is received for a packet after the maximum number of retransmits, no further packets can be transmitted before the MAX_RT interrupt is cleared.
-  * The packet loss counter ( PLOS_CNT ) is incremented at each MAX_RT interrupt.
-  * That is, ARC_CNT counts the number of retransmits that were required to get a single packet through.
-  * PLOS_CNT counts the number of packets that did not get through after the maximum number of retransmits.
-* nRF24L01+ goes into standby-I mode if CE is low. 
-  * Otherwise, next payload in TX FIFO is transmitted.
-  * If TX FIFO is empty and CE is still high, nRF24L01+ enters standby-II mode.
-* If nRF24L01+ is in standby-II mode, it goes to standby-I mode immediately if CE is set low.
+## rx_work_around.py
+###Funcitons
+```
+def parse_str(string, delim):
+    """
+    Separate the data stream from the radio
+    :param string: str, the incoming data stream
+    :param delim: str, the parameter to parse for
+    :return: 
+    """
+```
+* Data coming in from the radio over UART will have the format: `T<Temperature>TP<Pressure>PH<Humidity>H`
+* This function returns the numeric data between the deliminators
+### Main Program
+* Start a UART serial connection with the Arduino
+* When data arrives:
+    * Use `parse_str()` to store the atmospheric data into each parameters' respective variable
+    * Get the time and store it in a human-readable string
+    * Store the data in 'wx_log.csv'
+    * Pull the last set of measurements from `lng_log.csv` and `wx_log.csv`
+    * Embed the latest data into an HTML page
+    * Same the HTML page

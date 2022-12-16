@@ -73,7 +73,7 @@ class Lightning:
         # Write to those bits
         byte = self.get(address)  # Get what's there
         byte = byte & mask  # Write 0s to write bits. Keep others the same
-        data = data & ~mask # Write 0s to the persistent bits of `data`
+        data = data & ~mask  # Write 0s to the persistent bits of `data`
         byte = byte | data  # Combine the packets
         self.send(address, byte)
 
@@ -255,7 +255,8 @@ class Lightning:
         print('CPU Speed is {} Hz'.format(cpu_speed))
         # CPU speed must exceed (2 * 500 kHz)/(internal scaling factor)
         div_bool = False
-        target_speed = 5e5 * 2 * 2  # 500 kHz * 2 (to read high and low in 1 cycle) *2 (safety)
+        target_speed = 5e5 * 2 * 2
+        # 500 kHz * 2 (to read high and low in 1 cycle) *2 (safety)
         for scale in range(4):
             div_ratio = (scale + 1) * 16
             if target_speed / div_ratio < cpu_speed:

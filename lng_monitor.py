@@ -9,19 +9,14 @@ import lng_lib
 import RPi.GPIO as GPIO
 import time
 
-mosi=10
-miso=9
-clk=11
-cs=26
-irq=27
+mosi = 10
+miso = 9
+clk = 11
+cs = 26
+irq = 27
 
-lng = lng_lib.Lightning(mosi,miso,clk,cs,irq)
+lng = lng_lib.Lightning(mosi, miso, clk, cs, irq)
 lng.in_out(True)
-#Getting noise faults on indoor mode @ highest floor 16:18 11/15
-#11-16 Ran all day at 1,7,7 with no faults
-#11-17 Ran all last night 0,6,6 with no faults
-#11-17 Not getting any faults at lowest level. No obvious hardware issues. I will run all day today.
-#11-17 07:51 Set changes to run
 lng.noise_floor(3)
 lng.watchdog_sensitivity(11)
 lng.min_strikes(0)
@@ -32,26 +27,27 @@ if lng.calibrate():
 else:
     raise Exception('Calibration Failed')
 while True:
-    if GPIO.input(lng.int)==1:
-        int_type=lng.get(0x03)
-        int_type=int_type & 0x0F
-        if int_type==0x01:
-            event='noise'
-        elif int_type==0x04:
-            event='disturber'
-        elif int_type==0x08:
-            event='lightning'
+    if GPIO.input(lng.int) == 1:
+        int_type = lng.get(0x03)
+        int_type = int_type & 0x0F
+        if int_type == 0x01:
+            event = 'noise'
+        elif int_type == 0x04:
+            event = 'disturber'
+        elif int_type == 0x08:
+            event = 'lightning'
         else:
-            event='undefined'
+            event = 'undefined'
         print('{} detected'.format(event))
-        now=time.gmtime()
-        time_write='{}-{}-{} {}:{}:{}'.format(now[2],now[1],now[0],now[3],now[4],now[5])
-        distance=lng.get(0x07)
-        distance=distance&0x3F
-        lng_log=open('lng_log.csv','r')
-        log_mem=lng_log.read()
+        now = time.gmtime()
+        time_write = '{}-{}-{} {}:{}:{}'.format(now[2], now[1], now[0], now[3],
+                                                now[4], now[5])
+        distance = lng.get(0x07)
+        distance = distance & 0x3F
+        lng_log = open('lng_log.csv', 'r')
+        log_mem = lng_log.read()
         lng_log.close()
-        lng_log=open('lng_log.csv','w')
-        lng_log.write('{}\n{},{},{}'.format(log_mem,time_write,event,distance))
+        lng_log = open('lng_log.csv', 'w')
+        lng_log.write(
+            '{}\n{},{},{}'.format(log_mem, time_write, event, distance))
         lng_log.close()
-    

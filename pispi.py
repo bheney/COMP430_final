@@ -52,7 +52,7 @@ class Spi:
     def transaction(self, data, read_buffer=0):
         """
         Conduct an SPI transaction over GPIO pins
-        :param data: lst, outgoing data as list of ints
+        :param data: lst, outgoing data as list of ints<255
         :param read_buffer: int, number of bytes to continue clock operations
             after last outgoing bit
         :return: str, MISO status for EVERY clk pulse (includes a status
